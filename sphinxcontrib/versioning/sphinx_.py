@@ -57,7 +57,10 @@ class EventHandlers(object):
 
         # Add versions.html to sidebar.
         if '**' not in app.config.html_sidebars:
-            app.config.html_sidebars['**'] = ['versions.html']
+            try:
+                app.config.html_sidebars['**'] = StandaloneHTMLBuilder.default_sidebars + ['versions.html']
+            except AttributeError as e:
+                app.config.html_sidebars['**'] = ['versions.html']
         elif 'versions.html' not in app.config.html_sidebars['**']:
             app.config.html_sidebars['**'].append('versions.html')
 
