@@ -6,7 +6,8 @@ import multiprocessing
 import os
 import sys
 
-from sphinx import application, build_main, locale
+from sphinx import application, locale
+from sphinx.cmd.build import build_main
 from sphinx.builders.html import StandaloneHTMLBuilder
 from sphinx.config import Config as SphinxConfig
 from sphinx.errors import SphinxError
@@ -234,7 +235,7 @@ def build(source, target, versions, current_name, is_root):
     :param bool is_root: Is this build in the web root?
     """
     log = logging.getLogger(__name__)
-    argv = ('sphinx-build', source, target)
+    argv = (source, target)
     config = Config.from_context()
 
     log.debug('Running sphinx-build for %s with args: %s', current_name, str(argv))
@@ -262,7 +263,7 @@ def read_config(source, current_name):
     config = Config.from_context()
 
     with TempDir() as temp_dir:
-        argv = ('sphinx-build', source, temp_dir)
+        argv = (source, temp_dir)
         log.debug('Running sphinx-build for config values with args: %s', str(argv))
         child = multiprocessing.Process(target=_read_config, args=(argv, config, current_name, queue))
         child.start()
