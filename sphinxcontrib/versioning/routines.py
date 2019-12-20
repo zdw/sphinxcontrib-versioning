@@ -6,9 +6,11 @@ import os
 import re
 import subprocess
 
-from sphinxcontrib.versioning.git import export, fetch_commits, filter_and_date, GitError, list_remote
+from sphinxcontrib.versioning.git import export, fetch_commits, filter_and_date, GitError, list_remote, run_command
 from sphinxcontrib.versioning.lib import Config, HandledError, TempDir
 from sphinxcontrib.versioning.sphinx_ import build, read_config
+
+from subprocess import CalledProcessError
 
 RE_INVALID_FILENAME = re.compile(r'[^0-9A-Za-z.-]')
 
@@ -97,6 +99,31 @@ def gather_git_info(root, conf_rel_paths, whitelist_branches, whitelist_tags):
     return whitelisted_remotes
 
 
+def prep_commands(root_dir, target_dir):
+    """ Prepare the target directories after they've been checked out by
+    running a set of commands
+
+    Text subsitutions that can be used: _root_, _target_
+
+    Commands are run in target directory
+    """
+
+    log = logging.getLogger(__name__)
+
+    config = Config.from_context()
+
+    for cmd in config.prep_commands:
+        # replace directory path strings
+        rep_cmd = cmd.replace('_root_', root_dir).replace('_target_', target_dir)
+
+        # run the command
+        try:
+            log.info("Running prep command: '%s'" % rep_cmd)
+            run_command(target_dir, rep_cmd.split())
+        except CalledProcessError as exc:
+            log.error("Failed to run prep command - output: %s", exc.output)
+
+
 def pre_build(local_root, versions):
     """Build docs for all versions to determine root directory and master_doc names.
 
@@ -122,10 +149,15 @@ def pre_build(local_root, versions):
         export(local_root, sha, target)
 
     # Build root.
-    remote = versions[Config.from_context().root_ref]
+    config = Config.from_context()
+    remote = versions[config.root_ref]
     with TempDir() as temp_dir:
         log.debug('Building root (before setting root_dirs) in temporary directory: %s', temp_dir)
         source = os.path.dirname(os.path.join(exported_root, remote['sha'], remote['conf_rel_path']))
+
+        # run prep commands
+        prep_commands(config.git_root, os.path.join(exported_root, remote['sha']))
+
         build(source, temp_dir, versions, remote['name'], True)
         existing = os.listdir(temp_dir)
 
@@ -165,8 +197,13 @@ def build_all(exported_root, destination, versions):
 
     while True:
         # Build root.
-        remote = versions[Config.from_context().root_ref]
+        config = Config.from_context()
+        remote = versions[config.root_ref]
         log.info('Building root: %s', remote['name'])
+
+        # run prep commands
+        prep_commands(config.git_root, os.path.join(exported_root, remote['sha']))
+
         source = os.path.dirname(os.path.join(exported_root, remote['sha'], remote['conf_rel_path']))
         build(source, destination, versions, remote['name'], True)
 
@@ -175,6 +212,10 @@ def build_all(exported_root, destination, versions):
             log.info('Building ref: %s', remote['name'])
             source = os.path.dirname(os.path.join(exported_root, remote['sha'], remote['conf_rel_path']))
             target = os.path.join(destination, remote['root_dir'])
+
+            # run prep commands
+            prep_commands(config.git_root, os.path.join(exported_root, remote['sha']))
+
             try:
                 build(source, target, versions, remote['name'], False)
             except HandledError:
